@@ -1,0 +1,61 @@
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import MinMaxScaler
+
+air = pd.read_csv("C:/Users/Administrator/Downloads/AirQuality.csv")
+heart = pd.read_csv("C:/Users/Administrator/Downloads/heart.csv")
+
+air.columns = air.columns.str.strip().str.lower()
+heart.columns = heart.columns.str.strip().str.lower()
+
+air.drop_duplicates(inplace=True)
+heart.drop_duplicates(inplace=True)
+
+air.fillna(air.mean(numeric_only=True), inplace=True)
+heart.fillna(heart.mean(numeric_only=True), inplace=True)
+
+common_cols = set(air.columns).intersection(set(heart.columns))
+
+print("Common columns found:", common_cols)
+
+if "city" in common_cols:
+    data = pd.merge(air, heart, on="city", how="inner")
+    print("Merged on 'city'")
+else:
+    print("No common column found. Using Air Quality data only.")
+    data = air.copy()
+
+scaler = MinMaxScaler()
+
+num_cols = data.select_dtypes(include=np.number).columns
+
+if len(num_cols) > 0:
+    data[num_cols] = scaler.fit_transform(data[num_cols])
+
+data = pd.get_dummies(data, drop_first=True)
+
+pollution_cols = {"pm10", "no2", "co"}
+
+if pollution_cols.issubset(data.columns):
+    data["pollution_index"] = data[list(pollution_cols)].mean(axis=1)
+
+if "age" in data.columns:
+    data = data[data["age"] > 0]
+
+if "cholesterol" in data.columns:
+    data["cholesterol"] = data["cholesterol"].clip(0.25, 0.75)
+
+if len(num_cols) > 0:
+    Q1 = data[num_cols].quantile(0.25)
+    Q3 = data[num_cols].quantile(0.75)
+    IQR = Q3 - Q1
+
+    data = data[
+        ~(
+            ((data[num_cols] < (Q1 - 1.5 * IQR)) |
+             (data[num_cols] > (Q3 + 1.5 * IQR)))
+        ).any(axis=1)
+    ]
+
+print("Final Dataset Shape:", data.shape)
+print(data.head())
